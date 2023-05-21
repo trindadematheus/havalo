@@ -1,4 +1,4 @@
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
@@ -6,7 +6,8 @@ import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { Chess } from "chess.js";
 
 import * as S from "./styles";
-import positions from "../../data/positions";
+import cellPositions from "../../data/cell-positions";
+import Piece from "../../components/Piece";
 
 const chess = new Chess();
 
@@ -21,14 +22,21 @@ const CameraControls = () => {
 function HomePage() {
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
   const [targetsCells, setTargetsCells] = useState<string[]>([]);
+  const [board, setBoard] = useState<any[]>([]);
 
-  console.log(chess.ascii());
+  const tableMaterial = useLoader(MTLLoader, "/models/table/tab.mtl");
+  const tableObject = useLoader(
+    OBJLoader,
+    "/models/table/tab.obj",
+    (loader) => {
+      tableMaterial.preload();
+      loader.setMaterials(tableMaterial);
+    }
+  );
 
-  const materials = useLoader(MTLLoader, "/models/table/tab.mtl");
-  const object = useLoader(OBJLoader, "/models/table/tab.obj", (loader) => {
-    materials.preload();
-    loader.setMaterials(materials);
-  });
+  useEffect(() => {
+    updateBoard();
+  }, []);
 
   function resetCellsIndicators() {
     setTargetsCells([]);
@@ -39,6 +47,7 @@ function HomePage() {
     if (targetsCells.includes(label)) {
       chess.move(`${selectedCell}-${label}`);
       resetCellsIndicators();
+      updateBoard();
     } else {
       if (chess.moves({ square: label }).length > 0) {
         const targets = chess
@@ -53,15 +62,46 @@ function HomePage() {
     }
   }
 
+  function updateBoard() {
+    let newBoard: any[] = [];
+
+    chess.board().map((line) =>
+      line.map((cell) => {
+        if (cell?.square) {
+          newBoard.push({
+            position: cellPositions[cell?.square],
+            type: cell?.type,
+            color: cell?.color,
+            cell: cell.square,
+          });
+        }
+      })
+    );
+
+    setBoard(newBoard);
+  }
+
   return (
     <>
       <S.Container>
         <Canvas shadows camera={{ position: 5 }}>
           <Suspense fallback={null}>
-            <primitive object={object} />
+            <primitive object={tableObject} />
           </Suspense>
 
-          {Object.values(positions).map((item) => (
+          {board.map((piece) => (
+            <Piece
+              key={piece.cell}
+              type={`${piece.type}/${piece.color}`}
+              position={[
+                piece.position.position.x,
+                piece.position.position.y,
+                piece.position.position.z,
+              ]}
+            />
+          ))}
+
+          {Object.values(cellPositions).map((item) => (
             <mesh
               onClick={() => handleClickCell(item.label)}
               key={item.label}
